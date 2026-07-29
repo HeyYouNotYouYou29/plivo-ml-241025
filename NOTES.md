@@ -1,0 +1,3 @@
+# Notes
+
+Best config: BPE tokenizer (vocab 1024), 5-layer RoPE GPT (168 dim, 6 heads, block 256, tied embeddings, ~1.87M params), trained 2000 steps with AdamW (lr 3e-4, cosine to 3e-5, 100-step warmup, weight decay 0.1, grad clip 1.0, batch 32). BPE cuts tokens ~44% vs raw bytes on this corpus, so the model sees more linguistic content per 256-token window — critical for Hindi. RoPE removes learned position params and scales better than absolute embeddings. Weight tying reuses embedding matrix for the output head, freeing budget for depth. The training recipe (warmup + cosine + AdamW) avoids the baseline's early instability and late overfitting from a flat learning rate.
