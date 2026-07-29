@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>2000-Step LLM Speedrun — Summary</title>
+<style>
+  :root { --ink:#1a1a1a; --muted:#555; --line:#ddd; --ok:#0b6; --bg:#fafafa; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; max-width: 820px; margin: 2rem auto; padding: 0 1.25rem; color: var(--ink); background: var(--bg); line-height: 1.55; }
+  h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: 0.3rem; }
+  .lead { color: var(--muted); margin-bottom: 1.5rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95rem; }
+  th, td { border: 1px solid var(--line); padding: 0.45rem 0.65rem; text-align: left; }
+  th { background: #f0f0f0; }
+  .good { color: var(--ok); font-weight: 600; }
+  code { background: #eee; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.9em; }
+  ul { padding-left: 1.2rem; }
+</style>
+</head>
+<body>
+<h1>2000-Step LLM Speedrun</h1>
+<p class="lead">Submission summary from <code>RUNLOG.md</code>, architecture choices, and human vs agent contribution.</p>
+
+<h2>Final score (dev)</h2>
+<table>
+  <tr><th>Run</th><th>Dev bpb (lower better)</th><th>Params</th><th>Steps</th></tr>
+  <tr><td>Run 0 — baseline</td><td>2.3718</td><td>1,339,840</td><td>2000</td></tr>
+  <tr><td>Run 1 — full stack</td><td>1.7706</td><td>1,978,880</td><td>2000</td></tr>
+  <tr><td>Run 2 — FINAL (<code>ckpt.pt</code>)</td><td class="good">1.7296</td><td>1,978,880</td><td>2000</td></tr>
+</table>
+<p>Relative improvement vs baseline: <strong>~27% lower bpb</strong> on <code>dev_eval.txt</code>.</p>
+
+<h2>Architecture</h2>
+<ul>
+  <li><strong>Tokenizer:</strong> BPE vocab 768 trained only on <code>train_corpus.txt</code>, with raw-byte ids 0–255 as lossless fallback. ~2× sequence compression vs UTF-8 bytes (helps Hindi Devanagari).</li>
+  <li><strong>Model:</strong> Causal GPT, <code>n_layer=6</code>, <code>n_embd=160</code>, <code>n_head=5</code>, <code>block_size=256</code>, weight tying, RoPE (no absolute pos table), pre-norm + GELU MLP.</li>
+  <li><strong>Init:</strong> GPT-2 style (<code>std=0.02</code>) with residual projections scaled by <code>1/sqrt(2L)</code>.</li>
+  <li><strong>Params:</strong> 1,978,880 ≤ 2,000,000 hard cap.</li>
+</ul>
+
+<h2>Training recipe (final)</h2>
+<ul>
+  <li>AdamW (β=(0.9, 0.95)), weight decay 0.05 on 2D weights only</li>
+  <li>LR 2.5e-3, 150-step linear warmup, cosine decay to 10% of peak</li>
+  <li>Grad clip 1.0, batch 20 (~5120 tokens/step), 2000 optimizer steps, CPU-only PyTorch</li>
+</ul>
+
+<h2>Why this beats the baseline</h2>
+<ul>
+  <li>Byte tokenizer turns each Devanagari character into ~3 tokens; BPE restores usable context under the same block size.</li>
+  <li>Constant Adam LR with no warmup/clip wastes early steps; schedule + clip stabilizes a much higher peak LR.</li>
+  <li>Unused param budget (~0.66M) and untied head were free capacity; tying + depth use the cap productively.</li>
+  <li>RoPE generalizes better than a tiny learned absolute position table at T=256.</li>
+  <li>Run 2’s larger batch and higher LR beat Run 1 because loss was still decreasing at the step cap.</li>
+</ul>
+
+<h2>Experiment log</h2>
+<ol>
+  <li><strong>Run 0:</strong> stock baseline → bpb 2.3718</li>
+  <li><strong>Run 1:</strong> BPE+RoPE+AdamW+deeper tied GPT → bpb 1.7706</li>
+  <li><strong>Run 2:</strong> same model, lr=2.5e-3, batch=20, wd=0.05 → bpb 1.7296 (submission)</li>
+</ol>
+
+<h2>Human vs machine</h2>
+<ul>
+  <li><strong>Machine (Cursor agent):</strong> Implemented BPE tokenizer, RoPE GPT, AdamW trainer; ran baseline + two improved trains/evals; fixed slow full-corpus BPE encode; wrote RUNLOG, NOTES, and this SUMMARY.</li>
+  <li><strong>Human:</strong> Provided the assignment PDF / handout and directed execution of the speedrun under official caps.</li>
+</ul>
+
+<p style="margin-top:2rem;color:var(--muted);font-size:0.9rem;">Interface preserved: <code>python evaluate.py --checkpoint ckpt.pt --text_file &lt;file&gt;</code></p>
+</body>
+</html>
